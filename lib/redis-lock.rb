@@ -3,7 +3,7 @@ require 'active_support/core_ext'
 require 'robust-redis-lock/script'
 
 class RedisLock
-  attr_reader   :key
+  attr_reader :key
   cattr_accessor :redis
 
   def initialize(key, options={})
