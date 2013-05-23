@@ -26,51 +26,49 @@ class RedisLock
   end
 
   def try_lock
-    now = Time.now.to_i
-    @expires_at = now + @expire + 1
-    @token = Random.rand(1000000000)
-
+    now = nil
+    redis.time.tap do |seconds, ms|
+      now = (seconds + @expire.seconds)*1000
+      @expire_at = (now + (ms/1000)).to_i
+    end
     # This script loading is not thread safe (touching a class variable), but
     # that's okay, because the race is harmless.
     @@lock_script ||= Script.new <<-SCRIPT
         local key = KEYS[1]
         local now = tonumber(ARGV[1])
         local expires_at = tonumber(ARGV[2])
-        local token = ARGV[3]
-        local lock_value = expires_at .. ':' .. token
-        local key_value = redis.call('get', key)
+        local lock_value = expires_at
+        local key_expiriation = redis.call('get', key)
 
-        if key_value and tonumber(key_value:match("([^:]*):"):rep(1)) > now then return false end
-        redis.call('set', key, lock_value)
+        if key_expiriation and tonumber(key_expiriation) > now then return false end
+        redis.call('set', key, expires_at)
 
-        if key_value then return 'recovered' else return true end
+        if key_expiriation then return 'recovered' else return true end
     SCRIPT
-    result = @@lock_script.eval(redis, :keys => [@key], :argv => [now, @expires_at, @token])
+    result = @@lock_script.eval(redis, :keys => [@key], :argv => [now, @expire_at])
     return :recovered if result == 'recovered'
     !!result
   end
 
   def unlock
     # Since it's possible that the operations in the critical section took a long time,
-    # we can't just simply release the lock. The unlock method checks if @expires_at
+    # we can't just simply release the lock. The unlock method checks if @expire_at
     # remains the same, and do not release when the lock timestamp was overwritten.
     @@unlock_script ||= Script.new <<-SCRIPT
         local key = KEYS[1]
-        local expires_at = ARGV[1]
-        local token = ARGV[2]
-        local lock_value = expires_at .. ':' .. token
+        local expire_at = ARGV[1]
 
-        if redis.call('get', key) == lock_value then
+        if redis.call('get', key) == expire_at then
           redis.call('del', key)
           return true
         else
           return false
         end
     SCRIPT
-    @@unlock_script.eval(redis, :keys => [@key], :argv => [@expires_at, @token])
+    @@unlock_script.eval(redis, :keys => [@key], :argv => [@expire_at])
   end
 
   def locked?
-    redis.get(@key) == "#{@expires_at}:#{@token}"
+    redis.get(@key) == @expire_at.to_s
   end
 end
