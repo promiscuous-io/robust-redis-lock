@@ -20,15 +20,15 @@ describe RedisLock do
 
   it "blocks if a lock is taken for the duration of the timeout" do
     subject.lock
-    @unlocked = false
+    unlocked = false
 
-    Thread.new { subject.lock; @unlocked = true }
+    Thread.new { subject.lock; unlocked = true }
 
-    @unlocked.should == false
+    unlocked.should == false
 
     sleep 1
 
-    @unlocked.should == true
+    unlocked.should == true
   end
 
   it "expires the lock after the lock timeout" do
