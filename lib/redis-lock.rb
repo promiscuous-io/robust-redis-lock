@@ -20,7 +20,7 @@ class RedisLock
     start_at = Time.now
     while Time.now - start_at < @timeout
       break if result = try_lock
-      sleep @sleep
+      sleep @sleep.seconds.to_i
     end
     result
   end
