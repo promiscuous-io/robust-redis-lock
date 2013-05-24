@@ -30,35 +30,10 @@ class Redis::Lock
     result = false
     start_at = Time.now
     while Time.now - start_at < @timeout
-      break if result = try_lock
+      break if result = _lock
       sleep @sleep
     end
     result
-  end
-
-  def try_lock
-    now = nil
-    @redis.time.tap do |seconds, ms|
-      now        = (seconds + (ms/1000))*1000
-      @expire_at = (now + @expire).to_i
-    end
-    # This script loading is not thread safe (touching a class variable), but
-    # that's okay, because the race is harmless.
-    @@lock_script ||= Script.new <<-SCRIPT
-        local key = KEYS[1]
-        local now = tonumber(ARGV[1])
-        local expires_at = tonumber(ARGV[2])
-        local lock_value = expires_at
-        local current_key_value = redis.call('get', key)
-
-        if current_key_value and tonumber(current_key_value) > now then return false end
-        redis.call('set', key, expires_at)
-
-        if current_key_value then return 'recovered' else return true end
-    SCRIPT
-    result = @@lock_script.eval(@redis, :keys => [@key], :argv => [now, @expire_at])
-    return :recovered if result == 'recovered'
-    !!result
   end
 
   def unlock
@@ -79,7 +54,47 @@ class Redis::Lock
     @@unlock_script.eval(@redis, :keys => [@key], :argv => [@expire_at])
   end
 
-  def locked?
-    @redis.get(@key) == @expire_at.to_s
+  def lockable?
+    lock_script(:try)
+  end
+
+  private
+
+  def _lock
+    lock_script(:lock)
+  end
+
+  def lock_script(mode)
+    now = nil
+    @redis.time.tap do |seconds, ms|
+      now        = (seconds + (ms/1000))*1000
+      @expire_at = now + @expire*1000 if mode == :lock
+    end
+    # This script loading is not thread safe (touching a class variable), but
+    # that's okay, because the race is harmless.
+    @@lock_script ||= Script.new <<-SCRIPT
+        local key = KEYS[1]
+        local now = tonumber(ARGV[1])
+        local expires_at = tonumber(ARGV[2])
+        local mode = ARGV[3]
+        local lock_value = expires_at
+        local current_key_value = tonumber(redis.call('get', key))
+
+        if current_key_value and tonumber(current_key_value) > now then
+          return false
+        end
+        if mode == 'lock' then
+          redis.call('set', key, expires_at)
+        end
+
+        if current_key_value then
+          return 'recovered'
+        else
+          return true
+        end
+    SCRIPT
+    result = @@lock_script.eval(@redis, :keys => [@key], :argv => [now, @expire_at, mode.to_s])
+    return :recovered if result == 'recovered'
+    !!result
   end
 end

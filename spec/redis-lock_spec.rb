@@ -4,18 +4,18 @@ describe Redis::Lock do
   subject       { Redis::Lock.new(key, options) }
   let(:redis)   { Redis.new }
   let(:key)     { 'key' }
-  let(:options) { { :timeout => 0.5, :expire => 0.5 } }
+  let(:options) { { :timeout => 1, :expire => 2 } }
 
   before { Redis::Lock.redis = redis }
 
   it "can lock and unlock" do
     subject.lock
 
-    subject.locked?.should == true
+    subject.lockable?.should == false
 
     subject.unlock
 
-    subject.locked?.should == false
+    subject.lockable?.should == true
   end
 
   it "blocks if a lock is taken for the duration of the timeout" do
@@ -26,16 +26,18 @@ describe Redis::Lock do
 
     unlocked.should == false
 
-    sleep 1
+    sleep 2
 
     unlocked.should == true
   end
 
   it "expires the lock after the lock timeout" do
     subject.lock
-    sleep 1
 
+    subject.lockable?.should == false
+    sleep 2
+
+    subject.lockable?.should == :recovered
     subject.lock.should == :recovered
-    subject.locked?.should == true
   end
 end
