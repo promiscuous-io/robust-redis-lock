@@ -4,7 +4,7 @@ describe Redis::Lock do
   subject       { Redis::Lock.new(key, options) }
   let(:redis)   { Redis.new }
   let(:key)     { 'key' }
-  let(:options) { { :timeout => 0.5.second, :expire => 0.5.second } }
+  let(:options) { { :timeout => 0.5, :expire => 0.5 } }
 
   before { Redis::Lock.redis = redis }
 

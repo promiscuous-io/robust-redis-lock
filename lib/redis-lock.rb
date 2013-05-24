@@ -1,18 +1,29 @@
 require 'redis'
-require 'active_support/core_ext'
 require 'robust-redis-lock/script'
 
 class Redis::Lock
   attr_reader :key
-  cattr_accessor :redis
+
+  class << self
+    attr_accessor :redis
+    attr_accessor :timeout
+    attr_accessor :sleep
+    attr_accessor :expire
+  end
+
+  self.timeout = 60
+  self.expire  = 60
+  self.sleep   = 0.1
 
   def initialize(key, options={})
-    raise "key cannot be nil" if key.nil?
-
     @key      = key
-    @timeout  = options[:timeout] || 10.seconds
-    @sleep    = options[:sleep]   || 0.1.seconds
-    @expire   = options[:expire]  || 10.seconds
+    @redis    = options[:redis] || self.class.redis
+    raise "key cannot be nil" if @key.nil?
+    raise "key cannot be nil" if @redis.nil?
+
+    @timeout  = options[:timeout] || self.class.timeout
+    @expire   = options[:expire]  || self.class.expire
+    @sleep    = options[:sleep]   || self.class.sleep
   end
 
   def lock
@@ -20,15 +31,15 @@ class Redis::Lock
     start_at = Time.now
     while Time.now - start_at < @timeout
       break if result = try_lock
-      sleep @sleep.seconds.to_i
+      sleep @sleep
     end
     result
   end
 
   def try_lock
     now = nil
-    redis.time.tap do |seconds, ms|
-      now = (seconds + @expire.seconds)*1000
+    @redis.time.tap do |seconds, ms|
+      now = (seconds + @expire)*1000
       @expire_at = (now + (ms/1000)).to_i
     end
     # This script loading is not thread safe (touching a class variable), but
@@ -45,7 +56,7 @@ class Redis::Lock
 
         if key_expiriation then return 'recovered' else return true end
     SCRIPT
-    result = @@lock_script.eval(redis, :keys => [@key], :argv => [now, @expire_at])
+    result = @@lock_script.eval(@redis, :keys => [@key], :argv => [now, @expire_at])
     return :recovered if result == 'recovered'
     !!result
   end
@@ -65,10 +76,10 @@ class Redis::Lock
           return false
         end
     SCRIPT
-    @@unlock_script.eval(redis, :keys => [@key], :argv => [@expire_at])
+    @@unlock_script.eval(@redis, :keys => [@key], :argv => [@expire_at])
   end
 
   def locked?
-    redis.get(@key) == @expire_at.to_s
+    @redis.get(@key) == @expire_at.to_s
   end
 end
