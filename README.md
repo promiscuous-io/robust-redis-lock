@@ -1,7 +1,8 @@
-Pollbooth [![Build Status](https://travis-ci.org/crowdtap/pollbooth.png?branch=master)](https://travis-ci.org/crowdtap/pollbooth)
+Robust Redis Lock [![Build Status](https://travis-ci.org/crowdtap/robust-redis-lock.png?branch=master)](https://travis-ci.org/crowdtap/robust-redis-lock)
 ======
 
-Pollbooth is an easy way to cache data that is automatically refreshed at a regular interval.
+This is a robust redis lock that ensures that locks expire in a safe manner by 
+using LUA scripting made available in Redis 2.6.
 
 License
 -------

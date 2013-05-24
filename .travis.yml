@@ -1,0 +1,8 @@
+language: ruby
+bundler_args: --without development
+script: bundle exec rspec spec
+env: JRUBY_OPTS="--server --debug -J-Xms512m -J-Xmx1024m"
+rvm:
+  - ruby-1.9.3
+  - ruby-head
+  - jruby-head
