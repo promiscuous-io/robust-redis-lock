@@ -9,16 +9,19 @@ class Redis::Lock
     attr_accessor :timeout
     attr_accessor :sleep
     attr_accessor :expire
+    attr_accessor :namespace
   end
 
-  self.timeout = 60
-  self.expire  = 60
-  self.sleep   = 0.1
+  self.timeout   = 60
+  self.expire    = 60
+  self.sleep     = 0.1
+  self.namespace = 'redis:lock'
 
   def initialize(key, options={})
-    @key      = key
+    raise "key cannot be nil" if key.nil?
+    @key      = (options[:namespace] || self.class.namespace) + key
+
     @redis    = options[:redis] || self.class.redis
-    raise "key cannot be nil"   if @key.nil?
     raise "redis cannot be nil" if @redis.nil?
 
     @timeout  = options[:timeout] || self.class.timeout
