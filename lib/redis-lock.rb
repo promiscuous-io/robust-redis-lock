@@ -19,7 +19,7 @@ class Redis::Lock
     @key      = key
     @redis    = options[:redis] || self.class.redis
     raise "key cannot be nil" if @key.nil?
-    raise "key cannot be nil" if @redis.nil?
+    raise "redis cannot be nil" if @redis.nil?
 
     @timeout  = options[:timeout] || self.class.timeout
     @expire   = options[:expire]  || self.class.expire
@@ -39,8 +39,8 @@ class Redis::Lock
   def try_lock
     now = nil
     @redis.time.tap do |seconds, ms|
-      now = (seconds + @expire)*1000
-      @expire_at = (now + (ms/1000)).to_i
+      now        = (seconds + (ms/1000))*1000
+      @expire_at = (now + @expire).to_i
     end
     # This script loading is not thread safe (touching a class variable), but
     # that's okay, because the race is harmless.
@@ -49,12 +49,12 @@ class Redis::Lock
         local now = tonumber(ARGV[1])
         local expires_at = tonumber(ARGV[2])
         local lock_value = expires_at
-        local key_expiriation = redis.call('get', key)
+        local current_key_value = redis.call('get', key)
 
-        if key_expiriation and tonumber(key_expiriation) > now then return false end
+        if current_key_value and tonumber(current_key_value) > now then return false end
         redis.call('set', key, expires_at)
 
-        if key_expiriation then return 'recovered' else return true end
+        if current_key_value then return 'recovered' else return true end
     SCRIPT
     result = @@lock_script.eval(@redis, :keys => [@key], :argv => [now, @expire_at])
     return :recovered if result == 'recovered'

@@ -1,4 +1,4 @@
-class Script
+class Redis::Lock::Script
   def initialize(script)
     @script = script
     @sha = Digest::SHA1.hexdigest(@script)
