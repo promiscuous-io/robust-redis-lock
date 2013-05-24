@@ -1,15 +1,17 @@
 class Redis::Lock::Script
-  def initialize(script)
+  def initialize(redis, script)
+    ensure_redis_version(redis)
+
+    @redis  = redis
     @script = script
     @sha = Digest::SHA1.hexdigest(@script)
   end
 
-  def eval(redis, options={})
-    ensure_redis_version(redis)
-    redis.evalsha(@sha, options)
+  def eval(options={})
+    @redis.evalsha(@sha, options)
   rescue ::Redis::CommandError => e
     if e.message =~ /^NOSCRIPT/
-      redis.script(:load, @script)
+      @redis.script(:load, @script)
       retry
     end
     raise e

@@ -11,11 +11,11 @@ describe Redis::Lock do
   it "can lock and unlock" do
     subject.lock
 
-    subject.lockable?.should == false
+    subject.try_lock.should == false
 
-    subject.unlock
+    subject.unlock.should == true
 
-    subject.lockable?.should == true
+    subject.try_lock.should == true
   end
 
   it "blocks if a lock is taken for the duration of the timeout" do
@@ -34,10 +34,9 @@ describe Redis::Lock do
   it "expires the lock after the lock timeout" do
     subject.lock
 
-    subject.lockable?.should == false
+    subject.try_lock.should == false
     sleep 1.5
 
-    subject.lockable?.should == :recovered
-    subject.lock.should == :recovered
+    subject.try_lock.should == :recovered
   end
 end
