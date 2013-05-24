@@ -11,6 +11,6 @@ RSpec.configure do |config|
   config.before(:each) do
     redis = Redis.new
     redis.flushdb
-    RedisLock.redis = redis
+    Redis::Lock.redis = redis
   end
 end

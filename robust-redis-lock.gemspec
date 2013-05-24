@@ -2,11 +2,12 @@
 $:.unshift File.expand_path("../lib", __FILE__)
 $:.unshift File.expand_path("../../lib", __FILE__)
 
+require 'redis'
 require 'robust-redis-lock/version'
 
 Gem::Specification.new do |s|
   s.name        = "robust-redis-lock"
-  s.version     = RedisLock::VERSION
+  s.version     = Redis::Lock::VERSION
   s.platform    = Gem::Platform::RUBY
   s.authors     = ["Kareem Kouddous"]
   s.email       = ["kareeknyc@gmail.com"]

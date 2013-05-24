@@ -1,12 +1,12 @@
 require 'spec_helper'
 
-describe RedisLock do
-  subject       { RedisLock.new(key, options) }
+describe Redis::Lock do
+  subject       { Redis::Lock.new(key, options) }
   let(:redis)   { Redis.new }
   let(:key)     { 'key' }
   let(:options) { { :timeout => 0.5.second, :expire => 0.5.second } }
 
-  before { RedisLock.redis = redis }
+  before { Redis::Lock.redis = redis }
 
   it "can lock and unlock" do
     subject.lock

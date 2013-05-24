@@ -2,7 +2,7 @@ require 'redis'
 require 'active_support/core_ext'
 require 'robust-redis-lock/script'
 
-class RedisLock
+class Redis::Lock
   attr_reader :key
   cattr_accessor :redis
 
