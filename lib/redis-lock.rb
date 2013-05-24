@@ -70,8 +70,8 @@ class Redis::Lock
 
   def lock_script(mode)
     now = nil
-    @redis.time.tap do |seconds, ms|
-      now        = seconds*1000 + (ms/1000)
+    @redis.time.tap do |seconds, us|
+      now        = seconds*1000 + (us/1000)
       @expire_at = now + @expire*1000 if mode == :lock
     end
     # This script loading is not thread safe (touching a class variable), but
