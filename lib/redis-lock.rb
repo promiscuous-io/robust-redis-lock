@@ -1,7 +1,8 @@
 require 'redis'
-require 'robust-redis-lock/script'
 
 class Redis::Lock
+  require 'robust-redis-lock/script'
+
   attr_reader :key
 
   class << self
