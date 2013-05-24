@@ -5,6 +5,7 @@ class Redis::Lock::Script
   end
 
   def eval(redis, options={})
+    ensure_redis_version(redis)
     redis.evalsha(@sha, options)
   rescue ::Redis::CommandError => e
     if e.message =~ /^NOSCRIPT/
@@ -16,6 +17,16 @@ class Redis::Lock::Script
 
   def to_s
     @script
+  end
+
+  private
+
+  def ensure_redis_version(redis)
+    info = redis.info
+    version = info['redis_version']
+    unless Gem::Version.new(version) >= Gem::Version.new('2.6.0')
+      raise "You are using Redis #{version}. Please use Redis 2.6.0 or greater"
+    end
   end
 end
 
