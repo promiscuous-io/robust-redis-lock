@@ -4,7 +4,7 @@ describe Redis::Lock do
   subject       { Redis::Lock.new(key, options) }
   let(:redis)   { Redis.new }
   let(:key)     { 'key' }
-  let(:options) { { :timeout => 1, :expire => 3 } }
+  let(:options) { { :timeout => 4, :expire => 4 } }
 
   before { Redis::Lock.redis = redis }
 
@@ -26,7 +26,7 @@ describe Redis::Lock do
 
     unlocked.should == false
 
-    sleep 3
+    sleep 4
 
     unlocked.should == true
   end
@@ -35,7 +35,7 @@ describe Redis::Lock do
     subject.lock
 
     subject.lockable?.should == false
-    sleep 3
+    sleep 4
 
     subject.lockable?.should == :recovered
     subject.lock.should == :recovered
