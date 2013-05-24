@@ -18,7 +18,7 @@ class Redis::Lock
   def initialize(key, options={})
     @key      = key
     @redis    = options[:redis] || self.class.redis
-    raise "key cannot be nil" if @key.nil?
+    raise "key cannot be nil"   if @key.nil?
     raise "redis cannot be nil" if @redis.nil?
 
     @timeout  = options[:timeout] || self.class.timeout
