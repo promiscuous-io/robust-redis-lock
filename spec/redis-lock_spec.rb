@@ -18,6 +18,24 @@ describe Redis::Lock do
     subject.try_lock.should == true
   end
 
+  it "can lock with a block" do
+    subject.lock do
+      subject.try_lock.should == false
+    end
+    subject.try_lock.should == true
+  end
+
+  it "ensures that the lock is unlocked when locking with a block" do
+    begin
+      subject.lock do
+        raise "An error"
+      end
+    rescue
+    end
+
+    subject.try_lock.should == true
+  end
+
   it "blocks if a lock is taken for the duration of the timeout" do
     subject.lock
     unlocked = false

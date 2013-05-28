@@ -37,7 +37,12 @@ class Redis::Lock
       break if result = try_lock
       sleep @sleep
     end
+
+    yield if block_given?
+
     result
+  ensure
+    unlock if block_given?
   end
 
   def try_lock
