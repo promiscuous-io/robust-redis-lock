@@ -1,4 +1,4 @@
-Robust Redis Lock [![Build Status](https://travis-ci.org/crowdtap/robust-redis-lock.png?branch=master)](https://travis-ci.org/crowdtap/robust-redis-lock)
+Robust Redis Lock [![Build Status](https://travis-ci.org/crowdtap/robust-redis-lock.png?branch=master)](https://travis-ci.org/crowdtap/robust-redis-lock) [![Gem Version](https://badge.fury.io/rb/robust-redis-lock.png)](http://badge.fury.io/rb/robust-redis-lock)
 ======
 
 This is a robust redis lock that ensures that only one process can access a
