@@ -2,7 +2,49 @@ Robust Redis Lock [![Build Status](https://travis-ci.org/crowdtap/robust-redis-l
 ======
 
 This is a robust redis lock that ensures that locks expire in a safe manner by 
-using LUA scripting made available in Redis 2.6.
+using LUA scripting made available in Redis 2.6. The lock ensures that only one
+process can access a critical section.
+
+Usage
+-----
+
+```ruby
+  Redis::Lock.redis = Redis.new
+  lock = Redis::Lock.new('lock_name')
+  lock.lock do
+    # Critical section
+  end
+```
+
+Advanced
+--------
+
+The following options can be passed into the lock method (default values are
+shown):
+
+```ruby
+  Redis.lock.new('lock_name', :redis     => Redis::Lock.redis,
+                              :timeout   => 60, # seconds
+                              :expire    => 60, # seconds
+                              :sleep     => 0.1, # seconds
+                              :namespace => 'redis:lock')
+```
+
+If the lock has expired within the specified `:expire` value then the lock method
+will return `:recovered`, otherwise it will return `true` if it has been acquired
+or `false` if it could not be acquired within the specified `:timeout` value.
+
+Note that if a lock is recovered there is no guarantee that the other process
+has died vs. that it is a slow running process. Therefore be very mindful of what
+expiration value you set as a value to low can result in multiple processes
+accessing the critical section. If you have recovered a lock you should cleanup
+for the dead process if its possible to get into an unstable state.
+
+
+Requirements
+------------
+* Redis 2.6+ (clustered redis is **not** supported)
+
 
 License
 -------
