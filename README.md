@@ -1,9 +1,12 @@
 Robust Redis Lock [![Build Status](https://travis-ci.org/crowdtap/robust-redis-lock.png?branch=master)](https://travis-ci.org/crowdtap/robust-redis-lock)
 ======
 
-This is a robust redis lock that ensures that locks expire in a safe manner by 
-using LUA scripting made available in Redis 2.6. The lock ensures that only one
-process can access a critical section.
+This is a robust redis lock that ensures that only one process can access a
+critical section of code.
+
+Unlike the many other implementations available, this implemebtation ensures
+that an orphaned lock eventually expires in a safe (non-racy) manner. LUA scripting
+made available in Redis 2.6 makes this possible.
 
 Usage
 -----
@@ -20,14 +23,14 @@ Advanced
 --------
 
 The following options can be passed into the lock method (default values are
-shown):
+listed):
 
 ```ruby
-  Redis.lock.new('lock_name', :redis     => Redis::Lock.redis,
-                              :timeout   => 60, # seconds
-                              :expire    => 60, # seconds
-                              :sleep     => 0.1, # seconds
-                              :namespace => 'redis:lock')
+  Redis::lock.new('lock_name', :redis     => Redis::Lock.redis,
+                               :timeout   => 60, # seconds
+                               :expire    => 60, # seconds
+                               :sleep     => 0.1, # seconds
+                               :namespace => 'redis:lock')
 ```
 
 If the lock has expired within the specified `:expire` value then the lock method
@@ -36,7 +39,7 @@ or `false` if it could not be acquired within the specified `:timeout` value.
 
 Note that if a lock is recovered there is no guarantee that the other process
 has died vs. that it is a slow running process. Therefore be very mindful of what
-expiration value you set as a value to low can result in multiple processes
+expiration value you set as a value too low can result in multiple processes
 accessing the critical section. If you have recovered a lock you should cleanup
 for the dead process if its possible to get into an unstable state.
 
