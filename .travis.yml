@@ -4,5 +4,5 @@ script: bundle exec rspec spec
 env: JRUBY_OPTS="--server --debug -J-Xms512m -J-Xmx1024m"
 rvm:
   - ruby-1.9.3
-  - ruby-head
+  - ruby-2.0
   - jruby-head
