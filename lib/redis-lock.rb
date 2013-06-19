@@ -20,7 +20,7 @@ class Redis::Lock
 
   def initialize(key, options={})
     raise "key cannot be nil" if key.nil?
-    @key      = (options[:namespace] || self.class.namespace) + key
+    @key      = (options[:namespace] || self.class.namespace) + ":" + key
 
     @redis    = options[:redis] || self.class.redis
     raise "redis cannot be nil" if @redis.nil?
@@ -35,7 +35,7 @@ class Redis::Lock
     start_at = Time.now
     while Time.now - start_at < @timeout
       break if result = try_lock
-      sleep @sleep
+      sleep @sleep.to_f
     end
 
     yield if block_given?
@@ -46,57 +46,59 @@ class Redis::Lock
   end
 
   def try_lock
-    now = nil; expire_at = nil
-    @redis.time.tap do |seconds, us|
-      now       = seconds*1000 + (us/1000)
-      expire_at = now + @expire*1000
-    end
+    now = Time.now.to_i
+
     # This script loading is not thread safe (touching a class variable), but
     # that's okay, because the race is harmless.
-    @@lock_script ||= Script.new @redis, <<-LUA
+    @@lock_script ||= Script.new <<-LUA
         local key = KEYS[1]
         local now = tonumber(ARGV[1])
         local expires_at = tonumber(ARGV[2])
-        local lock_value = expires_at
-        local current_key_value = tonumber(redis.call('get', key))
+        local token_key = 'redis:lock:token'
 
-        if current_key_value and tonumber(current_key_value) > now then
-          return false
+        local prev_expires_at = tonumber(redis.call('hget', key, 'expires_at'))
+        if prev_expires_at and prev_expires_at > now then
+          return {'locked', nil}
         end
 
-        redis.call('set', key, expires_at)
+        local next_token = redis.call('incr', token_key)
 
-        if current_key_value then
-          return 'recovered'
+        redis.call('hset', key, 'expires_at', expires_at)
+        redis.call('hset', key, 'token', next_token)
+
+        if prev_expires_at then
+          return {'recovered', next_token}
         else
-          return true
+          return {'acquired', next_token}
         end
     LUA
-    result = @@lock_script.eval(:keys => [@key], :argv => [now, expire_at])
-    if result
-      @expire_at = expire_at
-    end
+    result, token = @@lock_script.eval(@redis, :keys => [@key], :argv => [now, now + @expire])
 
-    return :recovered if result == 'recovered'
-    !!result
+    @token = token if token
+
+    case result
+    when 'locked'    then return false
+    when 'recovered' then return :recovered
+    when 'acquired'  then return true
+    end
   end
 
   def unlock
     # Since it's possible that the operations in the critical section took a long time,
     # we can't just simply release the lock. The unlock method checks if @expire_at
     # remains the same, and do not release when the lock timestamp was overwritten.
-    @@unlock_script ||= Script.new @redis, <<-LUA
+    @@unlock_script ||= Script.new <<-LUA
         local key = KEYS[1]
-        local expire_at = ARGV[1]
+        local token = ARGV[1]
 
-        if redis.call('get', key) == expire_at then
+        if redis.call('hget', key, 'token') == token then
           redis.call('del', key)
           return true
         else
           return false
         end
     LUA
-    result = @@unlock_script.eval(:keys => [@key], :argv => [@expire_at])
+    result = @@unlock_script.eval(@redis, :keys => [@key], :argv => [@token])
     !!result
   end
 end
