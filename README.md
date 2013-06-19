@@ -8,6 +8,18 @@ Unlike the many other implementations available, this implemebtation ensures
 that an orphaned lock eventually expires in a safe (non-racy) manner. LUA scripting
 made available in Redis 2.6 makes this possible.
 
+Install
+-------
+
+```ruby
+gem install robust-redis-lock
+```
+or add the following line to your Gemfile:
+```ruby
+gem 'robust-redis-lock'
+```
+and run `bundle install`
+
 Usage
 -----
 
