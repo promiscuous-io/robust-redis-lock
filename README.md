@@ -4,7 +4,7 @@ Robust Redis Lock [![Build Status](https://travis-ci.org/crowdtap/robust-redis-l
 This is a robust redis lock that ensures that only one process can access a
 critical section of code.
 
-Unlike the many other implementations available, this implemebtation ensures
+Unlike the many other implementations available, this implementation ensures
 that an orphaned lock eventually expires in a safe (non-racy) manner. LUA scripting
 made available in Redis 2.6 makes this possible.
 
