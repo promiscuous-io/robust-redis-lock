@@ -29,6 +29,10 @@ Usage
   lock.lock do
     # Critical section
   end
+
+  # Extend the lock by the timeout value. This will work regardless of whether
+  # the lock has timed out or not.
+  lock.extend
 ```
 
 Advanced
