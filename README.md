@@ -32,7 +32,12 @@ Usage
 
   # Extend the lock by the timeout value. This will work regardless of whether
   # the lock has timed out or not.
-  lock.extend
+  if lock.extend
+    # The lock was successfully extended
+  else
+    # The lock was not successfully extended. This means that the lock was taken by
+    # another process.
+  end
 ```
 
 Advanced
