@@ -32,8 +32,8 @@ class Redis::Lock
 
   def lock
     result = false
-    start_at = Time.now
-    while Time.now - start_at < @timeout
+    start_at = now
+    while now - start_at < @timeout
       break if result = try_lock
       sleep @sleep.to_f
     end
@@ -46,8 +46,6 @@ class Redis::Lock
   end
 
   def try_lock
-    now = Time.now.to_i
-
     # This script loading is not thread safe (touching a class variable), but
     # that's okay, because the race is harmless.
     @@lock_script ||= Script.new <<-LUA
@@ -72,7 +70,7 @@ class Redis::Lock
           return {'acquired', next_token}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key], :argv => [now, now + @expire])
+    result, token = @@lock_script.eval(@redis, :keys => [@key], :argv => [now.to_i, now.to_i + @expire])
 
     @token = token if token
 
@@ -103,7 +101,6 @@ class Redis::Lock
   end
 
   def extend
-    now  = Time.now.to_i
     @@extend_script ||= Script.new <<-LUA
         local key = KEYS[1]
         local expires_at = tonumber(ARGV[1])
@@ -116,6 +113,10 @@ class Redis::Lock
           return false
         end
     LUA
-    !!@@extend_script.eval(@redis, :keys => [@key], :argv => [now + @expire, @token])
+    !!@@extend_script.eval(@redis, :keys => [@key], :argv => [now.to_i + @expire, @token])
+  end
+
+  def now
+    Time.now
   end
 end
