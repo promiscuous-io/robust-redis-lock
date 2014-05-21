@@ -38,7 +38,7 @@ class Redis::Lock
       sleep @sleep.to_f
     end
 
-    yield if block_given?
+    yield if block_given? && result
 
     result
   ensure
