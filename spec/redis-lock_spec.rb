@@ -15,6 +15,20 @@ describe Redis::Lock do
     subject.try_lock.should == true
   end
 
+  it "does not yield the block if couldn't obtain the lock" do
+    flag = false
+
+    subject.lock
+
+    sleep 1.5
+
+    subject.lock do
+      flag = true
+    end
+
+    flag.should be_false
+  end
+
   it "can lock with a block" do
     subject.lock do
       subject.try_lock.should == false
