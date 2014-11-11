@@ -6,7 +6,7 @@ Bundler.require
 Dir["./spec/support/**/*.rb"].each {|f| require f}
 
 RSpec.configure do |config|
-  config.color_enabled = true
+  config.color = true
 
   redis_url = ENV["BOXEN_REDIS_URL"] || "redis://localhost/"
   redis = Redis.new(:url => redis_url)
