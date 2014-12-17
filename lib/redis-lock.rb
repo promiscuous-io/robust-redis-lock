@@ -1,4 +1,5 @@
 require 'redis'
+require 'yaml'
 
 class Redis::Lock
   require 'robust-redis-lock/script'
@@ -12,6 +13,8 @@ class Redis::Lock
     attr_accessor :expire
     attr_accessor :namespace
     attr_accessor :key_group
+    attr_accessor :serializer
+    attr_accessor :data
 
     def expired(options={})
       self.redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).map { |key| self.new(key, options) }
@@ -26,11 +29,13 @@ class Redis::Lock
     end
   end
 
-  self.timeout   = 60
-  self.expire    = 60
-  self.sleep     = 0.1
-  self.namespace = 'redis:lock'
-  self.key_group = 'default'
+  self.timeout    = 60
+  self.expire     = 60
+  self.sleep      = 0.1
+  self.namespace  = 'redis:lock'
+  self.key_group  = 'default'
+  self.serializer = YAML
+  self.data       = nil
 
   def initialize(key, options={})
     raise "key cannot be nil" if key.nil?
@@ -43,9 +48,11 @@ class Redis::Lock
     @redis    = options[:redis] || self.class.redis
     raise "redis cannot be nil" if @redis.nil?
 
-    @timeout  = options[:timeout] || self.class.timeout
-    @expire   = options[:expire]  || self.class.expire
-    @sleep    = options[:sleep]   || self.class.sleep
+    @timeout    = options[:timeout]    || self.class.timeout
+    @expire     = options[:expire]     || self.class.expire
+    @sleep      = options[:sleep]      || self.class.sleep
+    @serializer = options[:serializer] || self.class.serializer
+    @data       = options[:data]       || self.class.data
   end
 
   def lock
@@ -63,6 +70,10 @@ class Redis::Lock
     unlock if block_given?
   end
 
+  def fetch_data
+    unserialize(@redis.hget(key, 'data'))
+  end
+
   def try_lock
     # This script loading is not thread safe (touching a class variable), but
     # that's okay, because the race is harmless.
@@ -71,6 +82,7 @@ class Redis::Lock
         local key_group = KEYS[2]
         local now = tonumber(ARGV[1])
         local expires_at = tonumber(ARGV[2])
+        local data = ARGV[3]
         local token_key = 'redis:lock:token'
 
         local prev_expires_at = tonumber(redis.call('hget', key, 'expires_at'))
@@ -82,6 +94,7 @@ class Redis::Lock
 
         redis.call('hset', key, 'expires_at', expires_at)
         redis.call('hset', key, 'token', next_token)
+        redis.call('hset', key, 'data', data)
         redis.call('zadd', key_group, expires_at, key)
 
         if prev_expires_at then
@@ -90,7 +103,7 @@ class Redis::Lock
           return {'acquired', next_token}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire])
+    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, serialize(@data)])
 
     @token = token if token
 
@@ -142,6 +155,14 @@ class Redis::Lock
 
   def now
     Time.now
+  end
+
+  def serialize(data)
+    @serializer.dump(data)
+  end
+
+  def unserialize(data)
+    @serializer.load(data)
   end
 
   def ==(other)

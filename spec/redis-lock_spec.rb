@@ -90,6 +90,24 @@ describe Redis::Lock do
     end
   end
 
+  context 'when passing in data with a lock' do
+    let(:options) { { :timeout => 1, :expire => 1.5, :data => "some data" } }
+
+    it "can serialize strings" do
+      options[:data] = "some data"
+      subject.lock
+
+      subject.fetch_data.should == options[:data]
+    end
+
+    it "can serialize objects" do
+      options[:data] = { :a => 1, :b => 'I am a string', :c => { d: true } }
+      subject.lock
+
+      subject.fetch_data.should == options[:data]
+    end
+  end
+
   context 'when the expiration time is less then the timeout' do
     let(:options) { { :timeout => 1.5, :expire => 1 } }
 
