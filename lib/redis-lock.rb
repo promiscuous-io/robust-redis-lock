@@ -41,7 +41,7 @@ class Redis::Lock
     key = args.shift
     raise "key cannot be nil" if key.nil?
 
-    if args.length > 1
+    if args.length == 2
       @data = args.shift
     end
 
@@ -76,7 +76,7 @@ class Redis::Lock
   end
 
   def data
-    @data ||= serializer.load(@redis.hget(key, 'data'))
+    @data ||= @serializer.load(@redis.hget(key, 'data'))
   end
 
   def try_lock
