@@ -40,6 +40,33 @@ Usage
   end
 ```
 
+Expired Locks
+-------------
+
+To get all expired locks:
+
+```ruby
+  Redis::Lock.expired.each do |lock|
+    # Do something to clean up the lock
+    lock.unlock
+  end
+```
+
+If you have different groups of locks pass in the `:key_group` param when you
+create the lock and when retrieving expired locks:
+
+```ruby
+  options = { :key_group  => 'a_key_group' }
+
+  lock = Redis::Lock.new('lock_name', options)
+  lock.lock
+
+  Redis::Lock.expired(options).each do |lock|
+    # Do something to clean up the lock
+    lock.unlock
+  end
+```
+
 Advanced
 --------
 
@@ -47,7 +74,7 @@ The following options can be passed into the lock method (default values are
 listed):
 
 ```ruby
-  Redis::lock.new('lock_name', :redis     => Redis::Lock.redis,
+  Redis::Lock.new('lock_name', :redis     => Redis::Lock.redis,
                                :timeout   => 60, # seconds
                                :expire    => 60, # seconds
                                :sleep     => 0.1, # seconds
