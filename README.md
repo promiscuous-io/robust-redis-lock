@@ -84,7 +84,7 @@ listed):
 
 If the lock has expired within the specified `:expire` value then the lock method
 will return `:recovered`, otherwise it will return `true` if it has been acquired
-or `false` if it could not be acquired within the specified `:timeout` value.
+or `false` if it could not be acquired.
 
 Note that if a lock is recovered there is no guarantee that the other process
 has died vs. that it is a slow running process. Therefore be very mindful of what
@@ -95,7 +95,7 @@ for the dead process if its possible to get into an unstable state.
 
 Requirements
 ------------
-* Redis 2.6+ (clustered redis is **not** supported)
+* Redis 2.6+
 
 
 License
