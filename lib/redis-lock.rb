@@ -14,11 +14,15 @@ class Redis::Lock
     attr_accessor :key_group
 
     def expired(options={})
-      self.redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).map { |key| self.new(key.gsub(/^#{(options[:namespace] || self.namespace)}:/,''), options) }
+      self.redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).map { |key| self.new(key, options) }
     end
 
     def key_group_key(options)
-      [(options[:namespace] || self.namespace), (options[:key_group] || self.key_group), 'group'].join(':')
+      [namespace_prefix(options), (options[:key_group] || self.key_group), 'group'].join(':')
+    end
+
+    def namespace_prefix(options)
+      (options[:namespace] || self.namespace)
     end
   end
 
@@ -31,7 +35,9 @@ class Redis::Lock
   def initialize(key, options={})
     raise "key cannot be nil" if key.nil?
     @options   = options
-    @key       = (options[:namespace] || self.class.namespace) + ":" + key
+
+    namespace_prefix = self.class.namespace_prefix(options) unless key.start_with?(self.class.namespace_prefix(options))
+    @key = [namespace_prefix, key].compact.join(':')
 
     @redis    = options[:redis] || self.class.redis
     raise "redis cannot be nil" if @redis.nil?
