@@ -104,3 +104,25 @@ describe Redis::Lock do
     end
   end
 end
+
+describe Redis::Lock, '#expired' do
+  context "when there are expired locks and unexpired locks" do
+    let(:expired)   { Redis::Lock.new('1', { :expire => 0.01, :key_group => key_group }) }
+    let(:unexpired) { Redis::Lock.new('2', { :expire => 100,  :key_group => key_group }) }
+    let(:key_group) { 'test' }
+
+    before do
+      expired.lock
+      unexpired.lock
+      sleep 1
+    end
+
+    it "returns all locks that are expired" do
+      Redis::Lock.expired(:key_group => key_group).should == [expired]
+    end
+
+    it "only returns locks for the current key_group" do
+      Redis::Lock.expired(:key_group => 'xxx').should be_empty
+    end
+  end
+end

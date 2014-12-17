@@ -11,16 +11,27 @@ class Redis::Lock
     attr_accessor :sleep
     attr_accessor :expire
     attr_accessor :namespace
+    attr_accessor :key_group
+
+    def expired(options={})
+      self.redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).map { |key| self.new(key.gsub(/^#{(options[:namespace] || self.namespace)}:/,''), options) }
+    end
+
+    def key_group_key(options)
+      [(options[:namespace] || self.namespace), (options[:key_group] || self.key_group), 'group'].join(':')
+    end
   end
 
   self.timeout   = 60
   self.expire    = 60
   self.sleep     = 0.1
   self.namespace = 'redis:lock'
+  self.key_group = 'default'
 
   def initialize(key, options={})
     raise "key cannot be nil" if key.nil?
-    @key      = (options[:namespace] || self.class.namespace) + ":" + key
+    @options   = options
+    @key       = (options[:namespace] || self.class.namespace) + ":" + key
 
     @redis    = options[:redis] || self.class.redis
     raise "redis cannot be nil" if @redis.nil?
@@ -28,6 +39,10 @@ class Redis::Lock
     @timeout  = options[:timeout] || self.class.timeout
     @expire   = options[:expire]  || self.class.expire
     @sleep    = options[:sleep]   || self.class.sleep
+  end
+
+  def key_group_key
+    self.class.key_group_key(@options)
   end
 
   def lock
@@ -50,6 +65,7 @@ class Redis::Lock
     # that's okay, because the race is harmless.
     @@lock_script ||= Script.new <<-LUA
         local key = KEYS[1]
+        local key_group = KEYS[2]
         local now = tonumber(ARGV[1])
         local expires_at = tonumber(ARGV[2])
         local token_key = 'redis:lock:token'
@@ -63,6 +79,7 @@ class Redis::Lock
 
         redis.call('hset', key, 'expires_at', expires_at)
         redis.call('hset', key, 'token', next_token)
+        redis.call('zadd', key_group, expires_at, key)
 
         if prev_expires_at then
           return {'recovered', next_token}
@@ -70,7 +87,7 @@ class Redis::Lock
           return {'acquired', next_token}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key], :argv => [now.to_i, now.to_i + @expire])
+    result, token = @@lock_script.eval(@redis, :keys => [@key, key_group_key], :argv => [now.to_i, now.to_i + @expire])
 
     @token = token if token
 
@@ -87,36 +104,44 @@ class Redis::Lock
     # remains the same, and do not release when the lock timestamp was overwritten.
     @@unlock_script ||= Script.new <<-LUA
         local key = KEYS[1]
+        local key_group = KEYS[2]
         local token = ARGV[1]
 
         if redis.call('hget', key, 'token') == token then
           redis.call('del', key)
+          redis.call('zrem', key_group, key)
           return true
         else
           return false
         end
     LUA
-    result = @@unlock_script.eval(@redis, :keys => [@key], :argv => [@token])
+    result = @@unlock_script.eval(@redis, :keys => [@key, key_group_key], :argv => [@token])
     !!result
   end
 
   def extend
     @@extend_script ||= Script.new <<-LUA
         local key = KEYS[1]
+        local key_group = KEYS[2]
         local expires_at = tonumber(ARGV[1])
         local token = ARGV[2]
 
         if redis.call('hget', key, 'token') == token then
           redis.call('hset', key, 'expires_at', expires_at)
+          redis.call('zadd', key_group, expires_at, key)
           return true
         else
           return false
         end
     LUA
-    !!@@extend_script.eval(@redis, :keys => [@key], :argv => [now.to_i + @expire, @token])
+    !!@@extend_script.eval(@redis, :keys => [@key, key_group_key], :argv => [now.to_i + @expire, @token])
   end
 
   def now
     Time.now
+  end
+
+  def ==(other)
+    self.key == other.key
   end
 end
