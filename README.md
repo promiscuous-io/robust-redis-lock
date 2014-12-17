@@ -67,6 +67,24 @@ create the lock and when retrieving expired locks:
   end
 ```
 
+Data
+----
+
+Data can be passed included and stored on the lock:
+
+```ruby
+  Redis::Lock.new('lock_name', "some data here")
+```
+
+If you need to pass in options as well:
+
+```ruby
+  Redis::Lock.new('lock_name', "some data here", :timeout => 5)
+```
+
+Also, data can be any object and will be serialized into YAML by default, if you
+wish to use something else, refer to the [Advanced](#advanced) section below.
+
 Advanced
 --------
 
@@ -74,17 +92,20 @@ The following options can be passed into the lock method (default values are
 listed):
 
 ```ruby
-  Redis::Lock.new('lock_name', :redis     => Redis::Lock.redis,
-                               :timeout   => 60, # seconds
-                               :expire    => 60, # seconds
-                               :sleep     => 0.1, # seconds,
-                               :key_group => 'default',
-                               :namespace => 'redis:lock')
+  Redis::Lock.new('lock_name', :redis      => Redis::Lock.redis,
+                               :timeout    => 60, # seconds
+                               :expire     => 60, # seconds
+                               :sleep      => 0.1, # seconds,
+                               :key_group  => 'default',
+                               :serializer => YAML,
+                               :namespace  => 'redis:lock')
 ```
 
 If the lock has expired within the specified `:expire` value then the lock method
 will return `:recovered`, otherwise it will return `true` if it has been acquired
 or `false` if it could not be acquired.
+
+The `serializer` option needs to support both `load` and `dump`.
 
 Note that if a lock is recovered there is no guarantee that the other process
 has died vs. that it is a slow running process. Therefore be very mindful of what

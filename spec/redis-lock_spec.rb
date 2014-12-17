@@ -90,6 +90,43 @@ describe Redis::Lock do
     end
   end
 
+  context 'when passing in data with a lock' do
+    subject       { Redis::Lock.new(key, data, options) }
+    let(:options) { { :timeout => 1, :expire => 1.5 } }
+
+    context "when data is a string" do
+      let(:data) { "some data" }
+
+      it "serializes" do
+        subject.lock
+
+        subject.data.should == data
+      end
+    end
+
+    context "when data is a hash" do
+      let(:data) { { :a => 1, :b => "blah", :c => { :d => true, :e => [1,2,3] }} }
+
+      it "serializes" do
+        subject.lock
+
+        subject.data.should == data
+      end
+    end
+
+    context "when data is fetched from an existing lock" do
+      let(:data) { "data from a previous lock" }
+
+      it "fetches" do
+        subject.lock
+        subject.data.should == data
+
+        second_lock = Redis::Lock.new(subject.key, options)
+        second_lock.data.should == data
+      end
+    end
+  end
+
   context 'when the expiration time is less then the timeout' do
     let(:options) { { :timeout => 1.5, :expire => 1 } }
 
