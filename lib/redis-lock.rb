@@ -38,6 +38,7 @@ class Redis::Lock
 
     namespace_prefix = self.class.namespace_prefix(options) unless key.start_with?(self.class.namespace_prefix(options))
     @key = [namespace_prefix, key].compact.join(':')
+    @key_group_key = self.class.key_group_key(@options)
 
     @redis    = options[:redis] || self.class.redis
     raise "redis cannot be nil" if @redis.nil?
@@ -45,10 +46,6 @@ class Redis::Lock
     @timeout  = options[:timeout] || self.class.timeout
     @expire   = options[:expire]  || self.class.expire
     @sleep    = options[:sleep]   || self.class.sleep
-  end
-
-  def key_group_key
-    self.class.key_group_key(@options)
   end
 
   def lock
@@ -93,7 +90,7 @@ class Redis::Lock
           return {'acquired', next_token}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key, key_group_key], :argv => [now.to_i, now.to_i + @expire])
+    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire])
 
     @token = token if token
 
@@ -121,7 +118,7 @@ class Redis::Lock
           return false
         end
     LUA
-    result = @@unlock_script.eval(@redis, :keys => [@key, key_group_key], :argv => [@token])
+    result = @@unlock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [@token])
     !!result
   end
 
@@ -140,7 +137,7 @@ class Redis::Lock
           return false
         end
     LUA
-    !!@@extend_script.eval(@redis, :keys => [@key, key_group_key], :argv => [now.to_i + @expire, @token])
+    !!@@extend_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i + @expire, @token])
   end
 
   def now
