@@ -77,7 +77,8 @@ listed):
   Redis::Lock.new('lock_name', :redis     => Redis::Lock.redis,
                                :timeout   => 60, # seconds
                                :expire    => 60, # seconds
-                               :sleep     => 0.1, # seconds
+                               :sleep     => 0.1, # seconds,
+                               :key_group => 'default',
                                :namespace => 'redis:lock')
 ```
 
