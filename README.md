@@ -74,14 +74,13 @@ The following options can be passed into the lock method (default values are
 listed):
 
 ```ruby
-  Redis::Lock.new('lock_name', :redis      => Redis::Lock.redis,
-                               :timeout    => 60, # seconds
-                               :expire     => 60, # seconds
-                               :sleep      => 0.1, # seconds,
-                               :key_group  => 'default',
-                               :serializer => YAML,
-                               :data       => nil,
-                               :namespace  => 'redis:lock')
+  Redis::Lock.new('lock_name', data=nil, :redis      => Redis::Lock.redis,
+                                         :timeout    => 60, # seconds
+                                         :expire     => 60, # seconds
+                                         :sleep      => 0.1, # seconds,
+                                         :key_group  => 'default',
+                                         :serializer => YAML,
+                                         :namespace  => 'redis:lock')
 ```
 
 If the lock has expired within the specified `:expire` value then the lock method
@@ -90,7 +89,8 @@ or `false` if it could not be acquired.
 
 The `serializer` option needs to support both `load` and `dump`.
 
-Data is available by using the `fetch_data` method.
+The `data` param is optional and can be left out. You can retrieve data for a
+lock by using the `data` method after initialization.
 
 Note that if a lock is recovered there is no guarantee that the other process
 has died vs. that it is a slow running process. Therefore be very mindful of what

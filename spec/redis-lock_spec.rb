@@ -91,20 +91,27 @@ describe Redis::Lock do
   end
 
   context 'when passing in data with a lock' do
-    let(:options) { { :timeout => 1, :expire => 1.5, :data => "some data" } }
+    subject       { Redis::Lock.new(key, data, options) }
+    let(:options) { { :timeout => 1, :expire => 1.5 } }
 
-    it "can serialize strings" do
-      options[:data] = "some data"
-      subject.lock
+    context "when data is a string" do
+      let(:data) { "some data" }
 
-      subject.fetch_data.should == options[:data]
+      it "serializes" do
+        subject.lock
+
+        subject.data.should == data
+      end
     end
 
-    it "can serialize objects" do
-      options[:data] = { :a => 1, :b => 'I am a string', :c => { d: true } }
-      subject.lock
+    context "when data is a hash" do
+      let(:data) { { :a => 1, :b => "blah", :c => { :d => true, :e => [1,2,3] }} }
 
-      subject.fetch_data.should == options[:data]
+      it "serializes" do
+        subject.lock
+
+        subject.data.should == data
+      end
     end
   end
 

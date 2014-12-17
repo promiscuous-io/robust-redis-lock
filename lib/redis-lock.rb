@@ -14,7 +14,6 @@ class Redis::Lock
     attr_accessor :namespace
     attr_accessor :key_group
     attr_accessor :serializer
-    attr_accessor :data
 
     def expired(options={})
       self.redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).map { |key| self.new(key, options) }
@@ -35,24 +34,30 @@ class Redis::Lock
   self.namespace  = 'redis:lock'
   self.key_group  = 'default'
   self.serializer = YAML
-  self.data       = nil
 
-  def initialize(key, options={})
+  def initialize(*args)
+    raise "invalid number of args: expected 1..3, got #{args.length}" if args.length < 1 || args.length > 3
+
+    key = args.shift
     raise "key cannot be nil" if key.nil?
-    @options   = options
 
-    namespace_prefix = self.class.namespace_prefix(options) unless key.start_with?(self.class.namespace_prefix(options))
+    if args.length > 1
+      @data = args.shift
+    end
+
+    @options = args.shift || {}
+
+    namespace_prefix = self.class.namespace_prefix(@options) unless key.start_with?(self.class.namespace_prefix(@options))
     @key = [namespace_prefix, key].compact.join(':')
     @key_group_key = self.class.key_group_key(@options)
 
-    @redis    = options[:redis] || self.class.redis
+    @redis    = @options[:redis] || self.class.redis
     raise "redis cannot be nil" if @redis.nil?
 
-    @timeout    = options[:timeout]    || self.class.timeout
-    @expire     = options[:expire]     || self.class.expire
-    @sleep      = options[:sleep]      || self.class.sleep
-    @serializer = options[:serializer] || self.class.serializer
-    @data       = options[:data]       || self.class.data
+    @timeout    = @options[:timeout]    || self.class.timeout
+    @expire     = @options[:expire]     || self.class.expire
+    @sleep      = @options[:sleep]      || self.class.sleep
+    @serializer = @options[:serializer] || self.class.serializer
   end
 
   def lock
@@ -70,8 +75,8 @@ class Redis::Lock
     unlock if block_given?
   end
 
-  def fetch_data
-    unserialize(@redis.hget(key, 'data'))
+  def data
+    @data ||= serializer.load(@redis.hget(key, 'data'))
   end
 
   def try_lock
@@ -103,7 +108,7 @@ class Redis::Lock
           return {'acquired', next_token}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, serialize(@data)])
+    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, @serializer.dump(@data)])
 
     @token = token if token
 
@@ -155,14 +160,6 @@ class Redis::Lock
 
   def now
     Time.now
-  end
-
-  def serialize(data)
-    @serializer.dump(data)
-  end
-
-  def unserialize(data)
-    @serializer.load(data)
   end
 
   def ==(other)
