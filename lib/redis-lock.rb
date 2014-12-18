@@ -16,7 +16,8 @@ class Redis::Lock
     attr_accessor :serializer
 
     def expired(options={})
-      self.redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).map { |key| self.new(key, options) }
+      redis = options[:redis] || self.redis
+      redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).to_a.map { |key| self.new(key, options) }
     end
 
     def key_group_key(options)

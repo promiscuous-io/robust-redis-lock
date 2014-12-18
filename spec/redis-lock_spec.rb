@@ -143,6 +143,12 @@ describe Redis::Lock do
 end
 
 describe Redis::Lock, '#expired' do
+  context "when there are no expired locks" do
+    it "returns an empty array" do
+      Redis::Lock.expired.should be_empty
+    end
+  end
+
   context "when there are expired locks and unexpired locks" do
     let(:expired)   { Redis::Lock.new('1', { :expire => 0.01, :key_group => key_group }) }
     let(:unexpired) { Redis::Lock.new('2', { :expire => 100,  :key_group => key_group }) }
@@ -160,6 +166,13 @@ describe Redis::Lock, '#expired' do
 
     it "only returns locks for the current key_group" do
       Redis::Lock.expired(:key_group => 'xxx').should be_empty
+    end
+
+    it "removes the key when locking then unlocking an expired lock" do
+      lock = Redis::Lock.expired(:key_group => key_group).first
+      lock.lock; lock.unlock
+
+      Redis::Lock.expired(:key_group => key_group).should be_empty
     end
   end
 end
