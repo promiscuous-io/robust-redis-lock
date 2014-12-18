@@ -77,7 +77,10 @@ class Redis::Lock
   end
 
   def data
-    @data ||= @serializer.load(@redis.hget(key, 'data'))
+    @data ||= begin
+                raw = @redis.hget(key, 'data')
+                @serializer.load(raw) if raw
+              end
   end
 
   def try_lock
@@ -100,8 +103,10 @@ class Redis::Lock
 
         redis.call('hset', key, 'expires_at', expires_at)
         redis.call('hset', key, 'token', next_token)
-        redis.call('hset', key, 'data', data)
         redis.call('zadd', key_group, expires_at, key)
+        if data then
+          redis.call('hset', key, 'data', data)
+        end
 
         if prev_expires_at then
           return {'recovered', next_token}
@@ -109,7 +114,7 @@ class Redis::Lock
           return {'acquired', next_token}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, @serializer.dump(@data)])
+    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, @serializer.dump(data)])
 
     @token = token if token
 

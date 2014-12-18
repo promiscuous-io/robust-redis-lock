@@ -115,13 +115,28 @@ describe Redis::Lock do
     end
 
     context "when data is fetched from an existing lock" do
-      let(:data) { "data from a previous lock" }
+      let(:data) { "some data" }
 
       it "fetches" do
         subject.lock
         subject.data.should == data
 
         second_lock = Redis::Lock.new(subject.key, options)
+        second_lock.data.should == data
+      end
+    end
+
+    context "when an expired lock is re-locked" do
+      let(:data)    { "some data" }
+      let(:options) { { :timeout => 1, :expire => 0.1 } }
+
+      it "includes the data in the new lock" do
+        subject.lock
+
+        sleep 1
+
+        second_lock = Redis::Lock.new(subject.key, options)
+        second_lock.lock
         second_lock.data.should == data
       end
     end
