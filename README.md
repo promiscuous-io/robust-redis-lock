@@ -82,8 +82,11 @@ If you need to pass in options as well:
   Redis::Lock.new('lock_name', "some data here", :timeout => 5)
 ```
 
-Also, data can be any object and will be serialized into YAML by default, if you
+Data can be any object and will be serialized into YAML by default, if you
 wish to use something else, refer to the [Advanced](#advanced) section below.
+
+Note that if a lock is recovered and there was data stored on the previous lock
+it's returned when you recover the lock.
 
 Advanced
 --------
@@ -102,7 +105,7 @@ listed):
 ```
 
 If the lock has expired within the specified `:expire` value then the lock method
-will return `:recovered`, otherwise it will return `true` if it has been acquired
+will return the data associated with previous lock or `:recovered` if there was no data, otherwise it will return `true` if it has been acquired
 or `false` if it could not be acquired.
 
 The `serializer` option needs to support both `load` and `dump`.

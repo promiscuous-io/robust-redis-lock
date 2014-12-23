@@ -130,14 +130,14 @@ describe Redis::Lock do
       let(:data)    { "some data" }
       let(:options) { { :timeout => 1, :expire => 0.1 } }
 
-      it "includes the data in the new lock" do
+      it "returns the data from the previous lock and resets the data" do
         subject.lock
 
         sleep 1
 
         second_lock = Redis::Lock.new(subject.key, options)
-        second_lock.lock
-        second_lock.data.should == data
+        second_lock.lock.should == data
+        second_lock.data.should be_nil
       end
     end
   end

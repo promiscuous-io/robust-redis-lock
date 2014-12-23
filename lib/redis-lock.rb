@@ -96,7 +96,7 @@ class Redis::Lock
 
         local prev_expires_at = tonumber(redis.call('hget', key, 'expires_at'))
         if prev_expires_at and prev_expires_at > now then
-          return {'locked', nil}
+          return {'locked', nil, nil}
         end
 
         local next_token = redis.call('incr', token_key)
@@ -104,23 +104,25 @@ class Redis::Lock
         redis.call('hset', key, 'expires_at', expires_at)
         redis.call('hset', key, 'token', next_token)
         redis.call('zadd', key_group, expires_at, key)
-        if data then
-          redis.call('hset', key, 'data', data)
-        end
+
+        local prev_data = redis.call('hget', key, 'data')
+        redis.call('hset', key, 'data', data)
 
         if prev_expires_at then
-          return {'recovered', next_token}
+          return {'recovered', next_token, prev_data}
         else
-          return {'acquired', next_token}
+          return {'acquired', next_token, nil}
         end
     LUA
-    result, token = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, @serializer.dump(data)])
+    result, token, prev_data = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, @serializer.dump(@data)])
 
     @token = token if token
 
     case result
     when 'locked'    then return false
-    when 'recovered' then return :recovered
+    when 'recovered'
+      prev_data = @serializer.load(prev_data) if prev_data
+      return prev_data || :recovered
     when 'acquired'  then return true
     end
   end
