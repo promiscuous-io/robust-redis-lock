@@ -20,34 +20,108 @@ gem 'robust-redis-lock'
 ```
 and run `bundle install`
 
-Usage
+Usage (Basic)
 -----
+
+Similar to Mutex#synchronize, use synchronize to ensure only one process/thread accesses a critical
+section. Note that synchronize ensures that a lock is unlocked if an exception is thrown by the block.
 
 ```ruby
   Redis::Lock.redis = Redis.new
   lock = Redis::Lock.new('lock_name')
-  lock.lock do
+  lock.synchronize do
     # Critical section
-  end
 
-  # Extend the lock by the timeout value. This will work regardless of whether
-  # the lock has timed out or not.
-  if lock.extend
-    # The lock was successfully extended
-  else
-    # The lock was not successfully extended. This means that the lock was taken by
-    # another process.
+    # Extend the lock by the timeout value. This will raise a
+    Redis::Lock::LostLock exception if the lock could not be extended
+    lock.extend
+
+    # You can also use the try_ version of the all methods if you don't want to raise.
+    # Just make sure to check the return value
+
+    unless lock.try_extend
+      # You've lost the lock, make sure to deal with this
+    end
   end
 ```
+
+Usage (Advanced)
+-----
+
+Use Redis::Lock#lock when you want finer grained control or you need to handle recovered locks (expired locks that have been taken
+by another process).
+
+```ruby
+  Redis::Lock.redis = Redis.new
+  lock = Redis::Lock.new('lock_name')
+  begin
+    lock.lock
+    # Critical Section
+    lock.unlock
+  rescue Redis::Lock::Timeout
+    # Handle a timed out lock
+  rescue Redis::Lock::Recovered
+    # Handle a recovered lock (clean up for the other process)
+  rescue Redis::Lock::LostLock
+    # Handle the lock lost when unlocking
+  end
+```
+
+You can use the `try_lock` if you want to check and return immediately whether the lock is available and not raise.
+`try_unlock` and `try_extend` are similar and don't raise. This means you have to check return values... so be careful.
+
+```ruby
+  Redis::Lock.redis = Redis.new
+  lock = Redis::Lock.new('lock_name')
+  case lock.try_lock
+  when true
+    # Critical section
+    unless lock.unlock
+      # Handle a lost lock
+    end
+  when :recovered
+    # Lock recovered. Handle this case and then perform critical section
+  when false
+    # Failed to get lock
+  end
+```
+
+Recovery data can be passed included and stored on the lock. This is very useful if you need to clean up a recovered lock.
+
+```ruby
+  Redis::Lock.redis = Redis.new
+  lock = Redis::Lock.new('lock_name')
+  begin
+    lock.lock(:recovery_data => YAML.dump(some_data))
+    # Critical Section
+    lock.unlock
+  rescue Redis::Lock::Timeout
+    # Handle a timed out lock
+  rescue Redis::Lock::Recovered
+    # Handle a recovered lock (clean up for the other process)
+    recover(YAML.load(lock.recovery_data))
+    # Now you need to unlock and lock again to perform the original operation
+    lock.unlock
+    lock.lock(:recovery_data => YAML.dump(some_data))
+  rescue Redis::Lock::LostLock
+    # Handle the lock lost when unlocking
+  end
+```
+
+Note that the data must be a string. Use your favorite serializer to marshal data (YAML is great).
+
+Also note that if you recover a lock the recovery data passed into the lock method WILL NOT BE PERSISTED. This is
+so that previous recovery data is never overwritten unless explicitly done so through #unlock.
 
 Expired Locks
 -------------
 
-To get all expired locks:
+If you need to handle recovered data then you'll likely want to run a recovery process to recover expired locks.
 
 ```ruby
   Redis::Lock.expired.each do |lock|
     # Do something to clean up the lock
+    recover(YAML.load(lock.recovery_data))
     lock.unlock
   end
 ```
@@ -63,35 +137,14 @@ create the lock and when retrieving expired locks:
 
   Redis::Lock.expired(options).each do |lock|
     # Do something to clean up the lock
-    lock.unlock
   end
 ```
 
-Data
-----
 
-Data can be passed included and stored on the lock:
-
-```ruby
-  Redis::Lock.new('lock_name', "some data here")
-```
-
-If you need to pass in options as well:
-
-```ruby
-  Redis::Lock.new('lock_name', "some data here", :timeout => 5)
-```
-
-Data can be any object and will be serialized into YAML by default, if you
-wish to use something else, refer to the [Advanced](#advanced) section below.
-
-Note that if a lock is recovered and there was data stored on the previous lock
-it's returned when you recover the lock.
-
-Advanced
+Options
 --------
 
-The following options can be passed into the lock method (default values are
+The following options can be passed into the lock method or as class attributes (default values are
 listed):
 
 ```ruby
@@ -99,27 +152,15 @@ listed):
                                :timeout    => 60, # seconds
                                :expire     => 60, # seconds
                                :sleep      => 0.1, # seconds,
-                               :key_group  => 'default',
-                               :serializer => YAML,
-                               :namespace  => 'redis:lock')
+                               :key_group  => 'default')
+
+  # Probably use this in an initializer
+  Redis::Lock.redis = Redis.new
 ```
-
-If the lock has expired within the specified `:expire` value then the lock method
-will return the data associated with previous lock or `:recovered` if there was no data, otherwise it will return `true` if it has been acquired
-or `false` if it could not be acquired.
-
-The `serializer` option needs to support both `load` and `dump`.
-
-Note that if a lock is recovered there is no guarantee that the other process
-has died vs. that it is a slow running process. Therefore be very mindful of what
-expiration value you set as a value too low can result in multiple processes
-accessing the critical section. If you have recovered a lock you should cleanup
-for the dead process if its possible to get into an unstable state.
-
 
 Requirements
 ------------
-* Redis 2.6+
+* Redis 2.6+ (Redis Cluster is not supported... yet)
 
 
 License

@@ -1,55 +1,41 @@
 require 'redis'
-require 'yaml'
 
 class Redis::Lock
+  NAMESPACE = 'redis:lock'
+
   require 'robust-redis-lock/script'
 
   attr_reader :key
+  attr_reader :recovery_data
 
   class << self
     attr_accessor :redis
     attr_accessor :timeout
     attr_accessor :sleep
     attr_accessor :expire
-    attr_accessor :namespace
     attr_accessor :key_group
-    attr_accessor :serializer
 
     def expired(options={})
       redis = options[:redis] || self.redis
+      raise "redis cannot be nil" if redis.nil?
+
       redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).to_a.map { |key| self.new(key, options) }
     end
 
     def key_group_key(options)
-      [namespace_prefix(options), (options[:key_group] || self.key_group), 'group'].join(':')
-    end
-
-    def namespace_prefix(options)
-      (options[:namespace] || self.namespace)
+      [NAMESPACE, (options[:key_group] || self.key_group), 'group'].join(':')
     end
   end
 
   self.timeout    = 60
   self.expire     = 60
   self.sleep      = 0.1
-  self.namespace  = 'redis:lock'
   self.key_group  = 'default'
-  self.serializer = YAML
 
-  def initialize(*args)
-    raise "invalid number of args: expected 1..3, got #{args.length}" if args.length < 1 || args.length > 3
+  def initialize(key, options={})
+    @options = options
 
-    key = args.shift
-    raise "key cannot be nil" if key.nil?
-
-    if args.length == 2
-      @data = args.shift
-    end
-
-    @options = args.shift || {}
-
-    namespace_prefix = self.class.namespace_prefix(@options) unless key.start_with?(self.class.namespace_prefix(@options))
-    @key = [namespace_prefix, key].compact.join(':')
+    @key = key
     @key_group_key = self.class.key_group_key(@options)
 
     @redis    = @options[:redis] || self.class.redis
@@ -58,40 +44,43 @@ class Redis::Lock
     @timeout    = @options[:timeout]    || self.class.timeout
     @expire     = @options[:expire]     || self.class.expire
     @sleep      = @options[:sleep]      || self.class.sleep
-    @serializer = @options[:serializer] || self.class.serializer
   end
 
-  def lock
-    result = false
+  def synchronize(&block)
+    lock
+    begin
+      block.call
+    ensure
+      try_unlock
+    end
+  rescue Recovered
+  end
+
+  def lock(options={})
+    locked   = false
     start_at = now
+
     while now - start_at < @timeout
-      break if result = try_lock
+      break if locked = try_lock(options)
       sleep @sleep.to_f
     end
 
-    yield if block_given? && result
-
-    result
-  ensure
-    unlock if block_given?
+    raise Timeout.new(self)   unless locked
+    raise Recovered.new(self) if locked == :recovered
   end
 
-  def data
-    @data ||= begin
-                raw = @redis.hget(key, 'data')
-                @serializer.load(raw) if raw
-              end
-  end
+  def try_lock(options={})
+    raise "recovery_data must be a string" if options[:recovery_data] && !options[:recovery_data].is_a?(String)
 
-  def try_lock
     # This script loading is not thread safe (touching a class variable), but
     # that's okay, because the race is harmless.
     @@lock_script ||= Script.new <<-LUA
         local key = KEYS[1]
         local key_group = KEYS[2]
-        local now = tonumber(ARGV[1])
-        local expires_at = tonumber(ARGV[2])
-        local data = ARGV[3]
+        local bare_key = ARGV[1]
+        local now = tonumber(ARGV[2])
+        local expires_at = tonumber(ARGV[3])
+        local recovery_data = ARGV[4]
         local token_key = 'redis:lock:token'
 
         local prev_expires_at = tonumber(redis.call('hget', key, 'expires_at'))
@@ -103,67 +92,78 @@ class Redis::Lock
 
         redis.call('hset', key, 'expires_at', expires_at)
         redis.call('hset', key, 'token', next_token)
-        redis.call('zadd', key_group, expires_at, key)
-
-        local prev_data = redis.call('hget', key, 'data')
-        redis.call('hset', key, 'data', data)
+        redis.call('zadd', key_group, expires_at, bare_key)
 
         if prev_expires_at then
-          return {'recovered', next_token, prev_data}
+          return {'recovered', next_token, redis.call('hget', key, 'recovery_data')}
         else
+          redis.call('hset', key, 'recovery_data', recovery_data)
           return {'acquired', next_token, nil}
         end
     LUA
-    result, token, prev_data = @@lock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i, now.to_i + @expire, @serializer.dump(@data)])
-
-    @token = token if token
+    result, token, recovery_data = @@lock_script.eval(@redis,
+                                                      :keys => [NAMESPACE + @key, @key_group_key],
+                                                      :argv => [@key, now.to_i, now.to_i + @expire, options[:recovery_data]])
 
     case result
-    when 'locked'    then return false
+    when 'locked'
+      false
+    when 'acquired'
+      @token = token
+      true
     when 'recovered'
-      prev_data = @serializer.load(prev_data) if prev_data
-      return prev_data || :recovered
-    when 'acquired'  then return true
+      @token = token
+      @recovery_data = recovery_data
+      :recovered
     end
   end
 
   def unlock
+    raise Redis::Lock::LostLock.new(self) unless try_unlock
+  end
+
+  def try_unlock
     # Since it's possible that the operations in the critical section took a long time,
     # we can't just simply release the lock. The unlock method checks if @expire_at
     # remains the same, and do not release when the lock timestamp was overwritten.
     @@unlock_script ||= Script.new <<-LUA
         local key = KEYS[1]
         local key_group = KEYS[2]
-        local token = ARGV[1]
-
-        if redis.call('hget', key, 'token') == token then
-          redis.call('del', key)
-          redis.call('zrem', key_group, key)
-          return true
-        else
-          return false
-        end
-    LUA
-    result = @@unlock_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [@token])
-    !!result
-  end
-
-  def extend
-    @@extend_script ||= Script.new <<-LUA
-        local key = KEYS[1]
-        local key_group = KEYS[2]
-        local expires_at = tonumber(ARGV[1])
+        local bare_key = ARGV[1]
         local token = ARGV[2]
 
         if redis.call('hget', key, 'token') == token then
-          redis.call('hset', key, 'expires_at', expires_at)
-          redis.call('zadd', key_group, expires_at, key)
+          redis.call('del', key)
+          redis.call('zrem', key_group, bare_key)
           return true
         else
           return false
         end
     LUA
-    !!@@extend_script.eval(@redis, :keys => [@key, @key_group_key], :argv => [now.to_i + @expire, @token])
+    !!@@unlock_script.eval(@redis, :keys => [NAMESPACE + @key, @key_group_key], :argv => [@key, @token])
+  end
+
+  def extend
+    raise Redis::Lock::LostLock.new(self) unless try_extend
+  end
+
+  def try_extend
+    @@extend_script ||= Script.new <<-LUA
+        local key = KEYS[1]
+        local key_group = KEYS[2]
+        local bare_key = ARGV[1]
+        local expires_at = tonumber(ARGV[2])
+        local token = ARGV[3]
+
+        if redis.call('hget', key, 'token') == token then
+          redis.call('hset', key, 'expires_at', expires_at)
+          redis.call('zadd', key_group, expires_at, bare_key)
+          return true
+        else
+          return false
+        end
+    LUA
+    !!@@extend_script.eval(@redis, :keys => [NAMESPACE + @key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
   end
 
   def now
@@ -171,6 +171,36 @@ class Redis::Lock
   end
 
   def ==(other)
-    self.key == other.key
+    @key == other.key
+  end
+
+  def to_s
+    @key
+  end
+
+  class ErrorBase < RuntimeError
+    attr_reader :lock
+
+    def initialize(lock)
+      @lock = lock
+    end
+  end
+
+  class LostLock < ErrorBase
+    def message
+      "The following lock was lost while trying to modify: #{@lock}"
+    end
+  end
+
+  class Redis::Lock::Recovered < ErrorBase
+    def message
+      "The following lock was recovered: #{@lock}"
+    end
+  end
+
+  class Redis::Lock::Timeout < ErrorBase
+    def message
+      "The following lock timed-out waiting to get aquired: #{@lock}"
+    end
   end
 end
