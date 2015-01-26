@@ -19,7 +19,10 @@ class Redis::Lock
       redis = options[:redis] || self.redis
       raise "redis cannot be nil" if redis.nil?
 
-      redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).to_a.map { |key| self.new(key, options) }
+      redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).to_a.map do |key_token|
+        key, token = key_token.split(':')
+        self.new(key, options.merge(:token => token))
+      end
     end
 
     def key_group_key(options)
@@ -44,6 +47,7 @@ class Redis::Lock
     @timeout    = @options[:timeout]    || self.class.timeout
     @expire     = @options[:expire]     || self.class.expire
     @sleep      = @options[:sleep]      || self.class.sleep
+    @token      = @options[:token]
   end
 
   def synchronize(&block)
@@ -92,7 +96,7 @@ class Redis::Lock
 
         redis.call('hset', key, 'expires_at', expires_at)
         redis.call('hset', key, 'token', next_token)
-        redis.call('zadd', key_group, expires_at, bare_key)
+        redis.call('zadd', key_group, expires_at, bare_key .. ':' .. next_token)
 
         if prev_expires_at then
           return {'recovered', next_token, redis.call('hget', key, 'recovery_data')}
@@ -134,7 +138,7 @@ class Redis::Lock
 
         if redis.call('hget', key, 'token') == token then
           redis.call('del', key)
-          redis.call('zrem', key_group, bare_key)
+          redis.call('zrem', key_group, bare_key .. ':' .. token)
           return true
         else
           return false
@@ -154,16 +158,28 @@ class Redis::Lock
         local bare_key = ARGV[1]
         local expires_at = tonumber(ARGV[2])
         local token = ARGV[3]
+        local token_key = 'redis:lock:token'
 
         if redis.call('hget', key, 'token') == token then
+          local next_token = redis.call('incr', token_key)
+
           redis.call('hset', key, 'expires_at', expires_at)
-          redis.call('zadd', key_group, expires_at, bare_key)
-          return true
+          redis.call('hset', key, 'token', next_token)
+          redis.call('zadd', key_group, expires_at, bare_key .. ':' .. next_token)
+
+          return next_token
         else
           return false
         end
     LUA
-    !!@@extend_script.eval(@redis, :keys => [NAMESPACE + @key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
+    result = @@extend_script.eval(@redis, :keys => [NAMESPACE + @key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
+
+    if result
+      @token = result
+      true
+    else
+      false
+    end
   end
 
   def now

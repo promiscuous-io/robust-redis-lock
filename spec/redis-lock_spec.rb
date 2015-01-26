@@ -186,10 +186,17 @@ describe Redis::Lock, '#expired' do
     it "removes the key when locking then recovering an expired lock" do
       lock = Redis::Lock.expired(:key_group => key_group).first
 
-      lock.try_lock
       lock.unlock
 
       Redis::Lock.expired(:key_group => key_group).should be_empty
+    end
+
+    it "is possible to extend a lock returned and only allow a recovered lock to be extended once" do
+      lock1 = Redis::Lock.expired(:key_group => key_group).first
+      lock2 = Redis::Lock.expired(:key_group => key_group).first
+
+      lock1.try_extend.should == true
+      lock2.try_extend.should == false
     end
   end
 end
