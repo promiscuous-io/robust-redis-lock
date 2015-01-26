@@ -120,6 +120,8 @@ If you need to handle recovered data then you'll likely want to run a recovery p
 
 ```ruby
   Redis::Lock.expired.each do |lock|
+    # You should almost always extend the lock to ensure no once else can recover
+    lock.extend
     # Do something to clean up the lock
     recover(YAML.load(lock.recovery_data))
     lock.unlock
