@@ -106,7 +106,7 @@ class Redis::Lock
         end
     LUA
     result, token, recovery_data = @@lock_script.eval(@redis,
-                                                      :keys => [NAMESPACE + @key, @key_group_key],
+                                                      :keys => [namespaced_key, @key_group_key],
                                                       :argv => [@key, now.to_i, now.to_i + @expire, options[:recovery_data]])
 
     case result
@@ -144,7 +144,7 @@ class Redis::Lock
           return false
         end
     LUA
-    !!@@unlock_script.eval(@redis, :keys => [NAMESPACE + @key, @key_group_key], :argv => [@key, @token])
+    !!@@unlock_script.eval(@redis, :keys => [namespaced_key, @key_group_key], :argv => [@key, @token])
   end
 
   def extend
@@ -172,7 +172,7 @@ class Redis::Lock
           return false
         end
     LUA
-    result = @@extend_script.eval(@redis, :keys => [NAMESPACE + @key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
+    result = @@extend_script.eval(@redis, :keys => [namespaced_key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
 
     if result
       @token = result
@@ -192,6 +192,10 @@ class Redis::Lock
 
   def to_s
     @key
+  end
+
+  def namespaced_key
+    NAMESPACE + ':' + @key
   end
 
   class ErrorBase < RuntimeError
