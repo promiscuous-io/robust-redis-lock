@@ -7,6 +7,7 @@ Dir["./spec/support/**/*.rb"].each {|f| require f}
 
 RSpec.configure do |config|
   config.color = true
+  config.expect_with(:rspec){ |c| c.syntax = [:should, :expect] }
 
   redis_url = ENV["BOXEN_REDIS_URL"] || "redis://localhost/"
   redis = Redis.new(:url => redis_url)

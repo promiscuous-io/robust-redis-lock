@@ -198,7 +198,7 @@ class Redis::Lock
     NAMESPACE + ':' + @key
   end
 
-  class ErrorBase < RuntimeError
+  class Error < RuntimeError
     attr_reader :lock
 
     def initialize(lock)
@@ -206,19 +206,19 @@ class Redis::Lock
     end
   end
 
-  class LostLock < ErrorBase
+  class LostLock < Error
     def message
       "The following lock was lost while trying to modify: #{@lock}"
     end
   end
 
-  class Redis::Lock::Recovered < ErrorBase
+  class Recovered < Error
     def message
       "The following lock was recovered: #{@lock}"
     end
   end
 
-  class Redis::Lock::Timeout < ErrorBase
+  class Timeout < Error
     def message
       "The following lock timed-out waiting to get aquired: #{@lock}"
     end
