@@ -46,6 +46,15 @@ describe Redis::Lock do
         subject.try_lock.should == :recovered
       end
 
+      it "updates the lock in the list of expired locks" do
+        subject.lock
+
+        sleep 2
+        subject.try_lock.should == :recovered
+
+        Redis::Lock.all.should =~ [subject]
+      end
+
       it "raises if trying to unlock a lock that has been recovered" do
         subject.lock
 
@@ -140,7 +149,7 @@ describe Redis::Lock do
       end
     end
 
-    context "when an expired lock is re-locked" do
+    context "when the lock has expired" do
       let(:data)    { "some data" }
       let(:options) { { :timeout => 1, :expire => 0.0 } }
 
@@ -149,7 +158,14 @@ describe Redis::Lock do
         sleep 1
       end
 
-      it "raises and does not overwrite the data" do
+      it "returns the data when a recovered lock is extended" do
+        lock = Redis::Lock.expired.first
+        lock.extend
+
+        lock.recovery_data.should == data
+      end
+
+      it "raises and does not overwrite the data if attempting to lock twice" do
         2.times do
           begin
             lock = Redis::Lock.new(subject.key, options)
@@ -194,7 +210,7 @@ describe Redis::Lock, '#expired' do
 
       lock.unlock
 
-      Redis::Lock.expired(:key_group => key_group).should be_empty
+      Redis::Lock.all(:key_group => key_group).should == [unexpired]
     end
 
     it "is possible to extend a lock returned and only allow a recovered lock to be extended once" do
@@ -203,6 +219,14 @@ describe Redis::Lock, '#expired' do
 
       lock1.try_extend.should == true
       lock2.try_extend.should == false
+
+      Redis::Lock.all(:key_group => key_group).should =~ [lock1, unexpired]
+    end
+
+    it 'extending a lock updates the list of expired locks' do
+      Redis::Lock.expired(:key_group => key_group).first.extend
+
+      Redis::Lock.all(:key_group => key_group).should =~ [expired, unexpired]
     end
   end
 

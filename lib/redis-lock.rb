@@ -25,6 +25,16 @@ class Redis::Lock
       end
     end
 
+    def all(options={})
+      redis = options[:redis] || self.redis
+      raise "redis cannot be nil" if redis.nil?
+
+      redis.zrangebyscore(key_group_key(options), 0, "+inf").to_a.map do |key_token|
+        key, token = key_token.scan(/(.*):(.*)$/).first
+        self.new(key, options.merge(:token => token))
+      end
+    end
+
     def key_group_key(options)
       [NAMESPACE, (options[:key_group] || self.key_group), 'group'].join(':')
     end
@@ -95,15 +105,19 @@ class Redis::Lock
         local next_token = redis.call('incr', token_key)
 
         redis.call('hset', key, 'expires_at', expires_at)
-        redis.call('hset', key, 'token', next_token)
         redis.call('zadd', key_group, expires_at, bare_key .. ':' .. next_token)
 
+        local return_value = nil
         if prev_expires_at then
-          return {'recovered', next_token, redis.call('hget', key, 'recovery_data')}
+          redis.call('zrem', key_group, bare_key .. ':' .. redis.call('hget', key, 'token'))
+          return_value =  {'recovered', next_token, redis.call('hget', key, 'recovery_data')}
         else
           redis.call('hset', key, 'recovery_data', recovery_data)
-          return {'acquired', next_token, nil}
+          return_value =  {'acquired', next_token, nil}
         end
+
+        redis.call('hset', key, 'token', next_token)
+        return return_value
     LUA
     result, token, recovery_data = @@lock_script.eval(@redis,
                                                       :keys => [namespaced_key, @key_group_key],
@@ -165,9 +179,11 @@ class Redis::Lock
 
           redis.call('hset', key, 'expires_at', expires_at)
           redis.call('hset', key, 'token', next_token)
+
+          redis.call('zrem', key_group, bare_key .. ':' .. token)
           redis.call('zadd', key_group, expires_at, bare_key .. ':' .. next_token)
 
-          return next_token
+          return { next_token, redis.call('hget', key, 'recovery_data') }
         else
           return false
         end
@@ -175,7 +191,7 @@ class Redis::Lock
     result = @@extend_script.eval(@redis, :keys => [namespaced_key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
 
     if result
-      @token = result
+      @token, @recovery_data = result
       true
     else
       false
