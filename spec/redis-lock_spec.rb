@@ -7,6 +7,12 @@ describe Redis::Lock do
   context 'when the timeout is less then the expiration' do
     let(:options) { { :timeout => 1, :expire => 1.5 } }
 
+    it 'prefixes with the namespace' do
+      subject.lock
+
+      Redis::Lock.redis.hgetall(Redis::Lock::NAMESPACE + ':' + subject.key).should_not be_empty
+    end
+
     context 'using lock/unlock' do
       it "can lock and unlock" do
         subject.lock
