@@ -20,7 +20,7 @@ class Redis::Lock
       raise "redis cannot be nil" if redis.nil?
 
       redis.zrangebyscore(key_group_key(options), 0, Time.now.to_i).to_a.map do |key_token|
-        key, token = key_token.split(':')
+        key, token = key_token.scan(/(.*):(.*)$/).first
         self.new(key, options.merge(:token => token))
       end
     end

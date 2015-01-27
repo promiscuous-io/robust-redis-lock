@@ -199,4 +199,17 @@ describe Redis::Lock, '#expired' do
       lock2.try_extend.should == false
     end
   end
+
+  context "with keys that contain ':'" do
+    let(:expired)   { Redis::Lock.new('1:1:1', { :expire => 0 }) }
+
+    before do
+      expired.lock
+      sleep 1
+    end
+
+    it "returns all locks that are expired" do
+      Redis::Lock.expired.should == [expired]
+    end
+  end
 end
