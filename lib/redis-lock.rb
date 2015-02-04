@@ -183,7 +183,7 @@ class Redis::Lock
           redis.call('zrem', key_group, bare_key .. ':' .. token)
           redis.call('zadd', key_group, expires_at, bare_key .. ':' .. next_token)
 
-          return { next_token, redis.call('hget', key, 'recovery_data') }
+          return { next_token, redis.call('hget', key, 'recovery_data'), redis.call('hget', key, 'data') }
         else
           return false
         end
@@ -191,7 +191,8 @@ class Redis::Lock
     result = @@extend_script.eval(@redis, :keys => [namespaced_key, @key_group_key], :argv => [@key, now.to_i + @expire, @token])
 
     if result
-      @token, @recovery_data = result
+      @token, @recovery_data, old_data = result
+      @recovery_data = old_data if @recovery_data.nil?
       true
     else
       false

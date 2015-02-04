@@ -165,6 +165,17 @@ describe Redis::Lock do
         lock.recovery_data.should == data
       end
 
+      it "returns the data when a recovered lock is extended and the data is stored in the old key" do
+        lock = Redis::Lock.expired.first
+
+        Redis::Lock.redis.hdel(lock.namespaced_key, 'recovery_data')
+        Redis::Lock.redis.hset(lock.namespaced_key, 'data', data)
+
+        lock.extend
+
+        lock.recovery_data.should == data
+      end
+
       it "raises and does not overwrite the data if attempting to lock twice" do
         2.times do
           begin
