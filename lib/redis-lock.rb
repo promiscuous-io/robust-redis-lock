@@ -68,6 +68,7 @@ class Redis::Lock
       try_unlock
     end
   rescue Recovered
+    block.call
   end
 
   def lock(options={})

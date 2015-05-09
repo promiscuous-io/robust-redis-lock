@@ -129,9 +129,12 @@ describe Redis::Lock do
       context 'when the expiration time is less then the timeout' do
         let(:options) { { :timeout => 1.5, :expire => 1 } }
 
-        it "does not raise when the lock is recovered" do
+        it "does not raise when the lock is recovered and executes the block" do
+          called = false
           subject.lock
-          expect { Redis::Lock.new(subject.key, options).synchronize {}  }.to_not raise_error
+
+          expect { Redis::Lock.new(subject.key, options).synchronize { called = true }  }.to_not raise_error
+          called.should == true
         end
       end
     end
