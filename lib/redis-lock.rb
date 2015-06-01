@@ -62,13 +62,11 @@ class Redis::Lock
 
   def synchronize(&block)
     lock
-    begin
-      block.call
-    ensure
-      try_unlock
-    end
+    block.call
   rescue Recovered
     block.call
+  ensure
+    try_unlock
   end
 
   def lock(options={})
