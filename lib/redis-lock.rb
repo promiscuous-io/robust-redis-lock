@@ -144,6 +144,8 @@ class Redis::Lock
   end
 
   def try_unlock
+    raise NotLocked.new('unlock', self) unless @token
+
     # Since it's possible that the operations in the critical section took a long time,
     # we can't just simply release the lock. The unlock method checks if @expire_at
     # remains the same, and do not release when the lock timestamp was overwritten.
@@ -169,6 +171,8 @@ class Redis::Lock
   end
 
   def try_extend
+    raise NotLocked.new('extend', self) unless @token
+
     @@extend_script ||= Script.new <<-LUA
         local key = KEYS[1]
         local key_group = KEYS[2]
@@ -240,6 +244,17 @@ class Redis::Lock
   class Timeout < Error
     def message
       "The following lock timed-out waiting to get aquired: #{@lock}"
+    end
+  end
+
+  class NotLocked < Error
+    def initialize(operation, lock)
+      @operation = operation
+      @lock = lock
+    end
+
+    def message
+      "Trying to #{@operation} a lock has not been aquired: #{@lock}"
     end
   end
 end

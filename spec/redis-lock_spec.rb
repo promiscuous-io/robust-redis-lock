@@ -81,15 +81,23 @@ describe Redis::Lock do
         subject.try_lock.should == false
 
         sleep 2
-        Redis::Lock.new(key, options).try_extend.should == false
+        Redis::Lock.new(key, options).try_lock.should == :recovered
 
-        subject.try_lock.should == :recovered
+        subject.try_extend.should == false
       end
 
       it 'raises if the lock is taken' do
         subject.lock
 
         expect { subject.lock }.to raise_error(Redis::Lock::Timeout)
+      end
+
+      it 'raises if trying to unlock a lock that has not been acquired' do
+        expect { Redis::Lock.new(key, options).try_unlock }.to raise_error(Redis::Lock::NotLocked)
+      end
+
+      it 'raises if trying to extend a lock that has not been acquired' do
+        expect { Redis::Lock.new(key, options).try_extend }.to raise_error(Redis::Lock::NotLocked)
       end
     end
 
