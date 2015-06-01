@@ -163,7 +163,9 @@ class Redis::Lock
           return false
         end
     LUA
-    !!@@unlock_script.eval(@redis, :keys => [namespaced_key, @key_group_key], :argv => [@key, @token])
+    !!@@unlock_script.eval(@redis, :keys => [namespaced_key, @key_group_key], :argv => [@key, @token]).tap do
+      @token = nil
+    end
   end
 
   def extend

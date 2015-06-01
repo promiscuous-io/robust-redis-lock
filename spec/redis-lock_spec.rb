@@ -93,11 +93,17 @@ describe Redis::Lock do
       end
 
       it 'raises if trying to unlock a lock that has not been acquired' do
-        expect { Redis::Lock.new(key, options).try_unlock }.to raise_error(Redis::Lock::NotLocked)
+        expect { subject.try_unlock }.to raise_error(Redis::Lock::NotLocked)
+      end
+
+      it 'raises if unlocking a locked lock twice' do
+        subject.lock; subject.unlock
+
+        expect { subject.try_unlock }.to raise_error(Redis::Lock::NotLocked)
       end
 
       it 'raises if trying to extend a lock that has not been acquired' do
-        expect { Redis::Lock.new(key, options).try_extend }.to raise_error(Redis::Lock::NotLocked)
+        expect { subject.try_extend }.to raise_error(Redis::Lock::NotLocked)
       end
     end
 
