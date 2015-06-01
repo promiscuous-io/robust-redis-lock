@@ -60,13 +60,17 @@ class Redis::Lock
     @token      = @options[:token]
   end
 
-  def synchronize(&block)
-    lock
-    block.call
-  rescue Recovered
-    block.call
-  ensure
-    try_unlock
+  def synchronize
+    begin
+      lock
+    rescue Recovered
+    end
+
+    begin
+      yield
+    ensure
+      unlock
+    end
   end
 
   def lock(options={})
