@@ -267,4 +267,26 @@ describe Redis::Lock, '#expired' do
       Redis::Lock.expired.should == [expired]
     end
   end
+
+  it "can extend the lock" do
+    subject.lock
+
+    subject.try_lock.should == false
+
+    sleep 1.5
+    subject.extend.should == true
+
+    subject.try_lock.should == false
+  end
+
+  it "will not extend the lock if taken by another instance" do
+    subject.lock
+
+    subject.try_lock.should == false
+
+    sleep 1.5
+    Redis::Lock.new(key, options).extend.should == false
+
+    subject.try_lock.should == :recovered
+  end
 end

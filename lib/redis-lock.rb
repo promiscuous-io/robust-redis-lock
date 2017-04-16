@@ -259,4 +259,21 @@ class Redis::Lock
       "Trying to #{@operation} a lock has not been aquired: #{@lock}"
     end
   end
+
+  def extend
+    now  = Time.now.to_i
+    @@extend_script ||= Script.new <<-LUA
+        local key = KEYS[1]
+        local expires_at = tonumber(ARGV[1])
+        local token = ARGV[2]
+
+        if redis.call('hget', key, 'token') == token then
+          redis.call('hset', key, 'expires_at', expires_at)
+          return true
+        else
+          return false
+        end
+    LUA
+    !!@@extend_script.eval(@redis, :keys => [@key], :argv => [now + @expire, @token])
+  end
 end
